@@ -62,6 +62,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if os.Getenv("NETWORK_MODE") == "" {
+		fmt.Fprintln(os.Stderr, "env NETWORK_MODE is not set")
+		os.Exit(1)
+	}
+
 	r := gin.Default()
 
 	cacheStore := persistence.NewInMemoryStore(time.Second)
@@ -586,6 +591,11 @@ func handleMetricsAssetCount(c *gin.Context) {
 		return
 	}
 
+    if len(assetCountResponse.Nfts) == 0 {
+		c.JSON(http.StatusOK, gin.H{"asset_count": 0, "ai_model_count": 0, "dataset_count": 0})
+		return
+	}
+
 	for _, nft := range assetCountResponse.Nfts {
 		var intf struct {
 			Type string `json:"type"`
@@ -633,11 +643,30 @@ func handleMetricsTransactionCount(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
-	supportedContracts := []string{
-		"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
-		"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
-		"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
-		"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
+	networkMode := os.Getenv("NETWORK_MODE")
+
+	var supportedContracts []string
+
+	switch networkMode {
+	case "mainnet":
+		supportedContracts = []string{
+			"QmUjmtaEFTLpfm5Q6pZ4byriGFvxibF1h5XHWYRvTwvcJ3",
+			"QmNwpc6DwwQMuzHJiXrhmGzEwXyPK9PV5QqZrmDiDTb6TN",
+			"QmTycH8eLA9xp4Jckjit4LQkuRgeq3xaUZdKFsNtohrzFe",
+			"Qme6BUxAVX2vLN71j5sooXNKnZQJ6Y24q4ZkbkD9XjQBJ4",
+		}
+	
+	case "testnet":
+		supportedContracts = []string{
+			"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
+			"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
+			"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
+			"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
+		}
+	default:
+		fmt.Printf("unsupported network mode: %v", networkMode)
+		c.JSON(http.StatusInternalServerError, gin.H{"transaction_count": 0})
+		return
 	}
 
 	nfts, err := listNFTs()
@@ -676,7 +705,8 @@ func handleMetricsTransactionCount(c *gin.Context) {
 			continue
 		}
 
-		totalTransactionCount += len(contractObj.SCTDataReply)
+		txCount := len(contractObj.SCTDataReply) - 1 // Ignoring the deployed state block
+		totalTransactionCount += txCount
 	}
 
 	// Send the JSON response
