@@ -564,7 +564,7 @@ func handleMetricsAssetCount(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
-	targetURL, _ := url.JoinPath(RUBIX_API, "/api/list-nfts")
+	targetURL, _ := url.JoinPath(RubixNodeAddress, "/api/list-nfts")
 
 	response, err := queryRubixNode(targetURL)
 	if err != nil {
@@ -591,7 +591,7 @@ func handleMetricsAssetCount(c *gin.Context) {
 		return
 	}
 
-    if len(assetCountResponse.Nfts) == 0 {
+	if len(assetCountResponse.Nfts) == 0 {
 		c.JSON(http.StatusOK, gin.H{"asset_count": 0, "ai_model_count": 0, "dataset_count": 0})
 		return
 	}
@@ -655,7 +655,7 @@ func handleMetricsTransactionCount(c *gin.Context) {
 			"QmTycH8eLA9xp4Jckjit4LQkuRgeq3xaUZdKFsNtohrzFe",
 			"Qme6BUxAVX2vLN71j5sooXNKnZQJ6Y24q4ZkbkD9XjQBJ4",
 		}
-	
+
 	case "testnet":
 		supportedContracts = []string{
 			"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
