@@ -35,7 +35,46 @@ func getClientError(c *gin.Context, errMsg string) {
 	c.JSON(http.StatusBadRequest, gin.H{"status": false, "error": errMsg})
 }
 
-func handleUploadAsset_UploadArtifacts(c *gin.Context) {
+// func handleUploadAsset_UploadArtifacts(c *gin.Context) {
+// 	w := http.ResponseWriter(c.Writer)
+// 	enableCors(&w)
+
+// 	assetFile, err := c.FormFile("asset")
+// 	if err != nil {
+// 		getClientError(c, "Failed to get asset file, asset file is required")
+// 		return
+// 	}
+
+// 	metadata, err := c.FormFile("metadata")
+// 	if err != nil {
+// 		getClientError(c, "Failed to get metadata file, metadata file is required")
+// 		return
+// 	}
+
+// 	uploadDir := "./uploads"
+// 	timeStampDir := fmt.Sprintf("%v", time.Now().Unix())
+// 	uploadDestination := path.Join(uploadDir, timeStampDir)
+// 	if err := os.MkdirAll(uploadDestination, 0755); err != nil {
+// 		getInternalError(c, fmt.Sprintf("failed to create upload directory: %v", err))
+// 		return
+// 	}
+
+// 	assetFilePath := path.Join(uploadDestination, assetFile.Filename)
+// 	if err := c.SaveUploadedFile(assetFile, assetFilePath); err != nil {
+// 		getInternalError(c, fmt.Sprintf("failed to save asset file: %v", err))
+// 		return
+// 	}
+
+// 	metadataFilePath := path.Join(uploadDestination, metadata.Filename)
+// 	if err := c.SaveUploadedFile(metadata, metadataFilePath); err != nil {
+// 		getInternalError(c, fmt.Sprintf("failed to save metadata file: %v", err))
+// 		return
+// 	}
+
+// 	getResult(c, assetFilePath, metadataFilePath)
+// }
+
+func (s *Server) handleUploadAsset_UploadArtifacts(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
@@ -119,7 +158,7 @@ func handleUploadAsset_UploadArtifacts(c *gin.Context) {
 	getResult(c, assetFilePath, metadataFilePath)
 }
 
-func handleUploadAsset_GetArtifactFileName(c *gin.Context) {
+func (s *Server) handleUploadAsset_GetArtifactFileName(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
@@ -153,7 +192,7 @@ func handleUploadAsset_GetArtifactFileName(c *gin.Context) {
 	getInternalError(c, fmt.Sprintf("no artifact file found for NFT ID %v", assetCID))
 }
 
-func handleUploadAsset_GetArtifactInfo(c *gin.Context) {
+func (s *Server) handleUploadAsset_GetArtifactInfo(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
@@ -196,7 +235,7 @@ func handleUploadAsset_GetArtifactInfo(c *gin.Context) {
 	getMetadataResult(c, base64EncodedMetadata)
 }
 
-func handleDownloadArtifact(c *gin.Context) {
+func (s *Server) handleDownloadArtifact(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 

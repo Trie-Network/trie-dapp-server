@@ -20,15 +20,14 @@ import (
 	"github.com/gin-contrib/cache/persistence"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/syndtr/goleveldb/leveldb"
 
 	wasmbridge "github.com/rubixchain/rubix-wasm/go-wasm-bridge"
 	wasmContext "github.com/rubixchain/rubix-wasm/go-wasm-bridge/context"
-
-	_ "github.com/joho/godotenv/autoload"
 )
 
 var TrieClientsMap = make(map[string]*websocket.Conn)
-var RubixNodeAddress string = ""
+
 var Upgrader = websocket.Upgrader{
 	// CheckOrigin allows connections from any origin, which is suitable for development
 	// In production, this should be restricted to trusted origins
@@ -44,27 +43,19 @@ func enableCors(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization")
 }
 
+type Server struct {
+	DB *leveldb.DB
+}
+
 func main() {
-	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		fmt.Fprintln(os.Stderr, "⚠️  .env file not found. Please copy from .env.sample")
-		os.Exit(1)
+	db, err := leveldb.OpenFile("./creditstorage", nil)
+	if err != nil {
+		panic(fmt.Sprintf("failed to open leveldb: %v", err))
 	}
+	defer db.Close()
 
-	RubixNodeAddress = os.Getenv("RUBIX_NODE_ADDRESS")
-	if RubixNodeAddress == "" {
-		fmt.Fprintln(os.Stderr, "env RUBIX_NODE_ADDRESS is not set")
-		os.Exit(1)
-	}
-
-	dappServerPort := os.Getenv("DAPP_SERVER_PORT")
-	if dappServerPort == "" {
-		fmt.Fprintln(os.Stderr, "env DAPP_SERVER_PORT is not set")
-		os.Exit(1)
-	}
-
-	if os.Getenv("NETWORK_MODE") == "" {
-		fmt.Fprintln(os.Stderr, "env NETWORK_MODE is not set")
-		os.Exit(1)
+	server := &Server{
+		DB: db,
 	}
 
 	r := gin.Default()
@@ -74,32 +65,35 @@ func main() {
 	r.GET("/ws", func(c *gin.Context) {
 		handleSocketConnection(c.Writer, c.Request)
 	})
-	r.GET("/connected-clients", handleConnectedClients)
-	r.GET("/ping-client", handlePingClient)
+	r.GET("/connected-clients", server.handleConnectedClients)
+	r.GET("/ping-client", server.handlePingClient)
 
-	r.POST("/api/upload_asset", handleUploadAsset)
-	r.POST("/api/upload_asset/upload_artifacts", handleUploadAsset_UploadArtifacts)
-	r.GET("/api/upload_asset/get_artifact_info_by_cid/:cid", cache.CachePage(cacheStore, 12*time.Hour, handleUploadAsset_GetArtifactInfo))
-	r.GET("/api/upload_asset/get_artifact_file_name/:cid", cache.CachePage(cacheStore, 12*time.Hour, handleUploadAsset_GetArtifactFileName))
+	r.POST("/api/upload_asset", server.handleUploadAsset)
+	r.POST("/api/upload_asset/upload_artifacts", server.handleUploadAsset_UploadArtifacts)
+	r.GET("/api/upload_asset/get_artifact_info_by_cid/:cid", cache.CachePage(cacheStore, 12*time.Hour, server.handleUploadAsset_GetArtifactInfo))
+	r.GET("/api/upload_asset/get_artifact_file_name/:cid", cache.CachePage(cacheStore, 12*time.Hour, server.handleUploadAsset_GetArtifactFileName))
 
-	r.POST("/api/use_asset", handleUseAsset)
-	r.GET("/api/download_artifact/:cid", handleDownloadArtifact)
+	r.POST("/api/use_asset", server.handleUseAsset)
+	r.GET("/api/download_artifact/:cid", server.handleDownloadArtifact)
 
-	r.POST("/api/pay_for_inference", handlePayForInference)
-
-	r.POST("/api/onboard_infra_provider", handleUserOnboarding)
-	r.GET("/api/onboarded_providers", handleOnboardedProviders)
+	r.POST("/api/onboard_infra_provider", server.handleUserOnboarding)
+	r.GET("/api/onboarded_providers", server.handleOnboardedProviders)
 
 	// NEW ENDPOINT FOR CREATE TOKEN
-	r.POST("/api/create_token", handleCreateToken)
+	r.POST("/api/create_token", server.handleCreateToken)
 
 	// Metrics
-	r.GET("/metrics/asset_count", handleMetricsAssetCount)
-	r.GET("/metrics/transaction_count", cache.CachePage(cacheStore, 30*time.Second, handleMetricsTransactionCount))
+	r.GET("/metrics/asset_count", server.handleMetricsAssetCount)
+	r.GET("/metrics/transaction_count", cache.CachePage(cacheStore, 30*time.Second, server.handleMetricsTransactionCount))
 
-	r.GET("/api/get_rating_by_asset", GetRatingsFromChain)
+	r.GET("/api/get_rating_by_asset", server.GetRatingsFromChain)
+	
+	// Credits Balance Contract Callback
+	r.GET("/api/credit_balance/:did", server.handleGetCreditBalance)
+	r.POST("/api/add_credits", server.handleAddCredits)
+	r.POST("/api/deduct_credits", server.handleDeductCredits)
 
-	r.Run(":" + dappServerPort)
+	r.Run(":8082")
 }
 
 func wrapError(f func(code int, obj any), msg string) {
@@ -154,7 +148,7 @@ func RoundToPrecision(val float64, precision int, tolerance int) float64 {
 	return math.Round(val*factor) / factor
 }
 
-func GetRatingsFromChain(c *gin.Context) {
+func (s *Server) GetRatingsFromChain(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
@@ -198,7 +192,7 @@ func GetRatingFromChain(assetID string) (float64, int, error) {
 
 	fmt.Printf("Sending request body to Rubix: %s\n", string(bodyBytes))
 
-	resp, err := http.Post(fmt.Sprintf("http://%v/api/get-smart-contract-token-chain-data", RubixNodeAddress), "application/json", bytes.NewBuffer(bodyBytes))
+	resp, err := http.Post("http://localhost:20007/api/get-smart-contract-token-chain-data", "application/json", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -266,8 +260,8 @@ func GetRatingFromChain(assetID string) (float64, int, error) {
 	return average, user_count, nil
 }
 
-func handleUploadAsset(c *gin.Context) {
-	nodeAddress := RubixNodeAddress
+func (s *Server) handleUploadAsset(c *gin.Context) {
+	nodeAddress := "http://localhost:20007"
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/asset_publish_contract.wasm")
@@ -319,60 +313,8 @@ func handleUploadAsset(c *gin.Context) {
 	}
 }
 
-func handlePayForInference(c *gin.Context) {
-	nodeAddress := RubixNodeAddress
-	quorumType := 2
-
-	selfContractHashPath := path.Join("../artifacts/inference_contract.wasm")
-
-	var contractInputRequest ContractInputRequest
-
-	err := json.NewDecoder(c.Request.Body).Decode(&contractInputRequest)
-	if err != nil {
-		wrapError(c.JSON, "err: Invalid request body")
-		return
-	}
-
-	trieConn, ok := TrieClientsMap[contractInputRequest.InitiatorDID]
-	if !ok {
-		wrapError(c.JSON, fmt.Sprintf("clientID %s not found", contractInputRequest.InitiatorDID))
-		return
-	}
-
-	wasmCtx := wasmContext.NewWasmContext().WithExternalSocketConn(trieConn)
-
-	// Create Import function registry
-	hostFnRegistry := wasmbridge.NewHostFunctionRegistry()
-	hostFnRegistry.Register(ft.NewDoTransferFTApiCall())
-	hostFnRegistry.Register(nft.NewDoExecuteNFT())
-
-	// Initialize the WASM module
-	wasmModule, err := wasmbridge.NewWasmModule(
-		selfContractHashPath,
-		hostFnRegistry,
-		wasmbridge.WithRubixNodeAddress(nodeAddress),
-		wasmbridge.WithQuorumType(quorumType),
-		wasmbridge.WithWasmContext(wasmCtx),
-	)
-	if err != nil {
-		wrapError(c.JSON, fmt.Sprintf("unable to initialize wasmModule: %v", err))
-		return
-	}
-
-	if contractInputRequest.SmartContractData == "" {
-		wrapError(c.JSON, fmt.Sprintf("unable to fetch Smart Contract from callback"))
-		return
-	}
-
-	_, err = wasmModule.CallFunction(contractInputRequest.SmartContractData)
-	if err != nil {
-		wrapError(c.JSON, fmt.Sprintf("unable to execute function, err: %v", err))
-		return
-	}
-}
-
-func handleUseAsset(c *gin.Context) {
-	nodeAddress := RubixNodeAddress
+func (s *Server) handleUseAsset(c *gin.Context) {
+	nodeAddress := "http://localhost:20007"
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/asset_usage_contract.wasm")
@@ -425,8 +367,8 @@ func handleUseAsset(c *gin.Context) {
 }
 
 // NEW HANDLER FOR CREATE TOKEN
-func handleCreateToken(c *gin.Context) {
-	nodeAddress := RubixNodeAddress
+func (s *Server) handleCreateToken(c *gin.Context) {
+	nodeAddress := "http://localhost:20007"
 	quorumType := 2
 
 	// Use the existing WASM file that contains CREATE_FT functionality
@@ -480,8 +422,8 @@ func handleCreateToken(c *gin.Context) {
 	wrapSuccess(c.JSON, result)
 }
 
-func handleUserOnboarding(c *gin.Context) {
-	nodeAddress := RubixNodeAddress
+func (s *Server) handleUserOnboarding(c *gin.Context) {
+	nodeAddress := "http://localhost:20007"
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/onboarding_contract.wasm")
@@ -538,7 +480,7 @@ func handleUserOnboarding(c *gin.Context) {
 	}
 }
 
-func handleOnboardedProviders(c *gin.Context) {
+func (s *Server) handleOnboardedProviders(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
@@ -560,11 +502,11 @@ func handleOnboardedProviders(c *gin.Context) {
 	c.JSON(200, providerInfoMap)
 }
 
-func handleMetricsAssetCount(c *gin.Context) {
+func (s *Server) handleMetricsAssetCount(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
-	targetURL, _ := url.JoinPath(RubixNodeAddress, "/api/list-nfts")
+	targetURL, _ := url.JoinPath(RUBIX_API, "/api/list-nfts")
 
 	response, err := queryRubixNode(targetURL)
 	if err != nil {
@@ -588,11 +530,6 @@ func handleMetricsAssetCount(c *gin.Context) {
 	if rubixNftDir == "" {
 		fmt.Printf("metricsAssetCount: Unable to get RUBIX_NFT_DIR env variable")
 		c.JSON(http.StatusInternalServerError, gin.H{"asset_count": 0, "ai_model_count": 0, "dataset_count": 0})
-		return
-	}
-
-	if len(assetCountResponse.Nfts) == 0 {
-		c.JSON(http.StatusOK, gin.H{"asset_count": 0, "ai_model_count": 0, "dataset_count": 0})
 		return
 	}
 
@@ -639,34 +576,15 @@ func handleMetricsAssetCount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"asset_count": assetCount, "ai_model_count": aiModelCount, "dataset_count": datasetCount})
 }
 
-func handleMetricsTransactionCount(c *gin.Context) {
+func (s *Server) handleMetricsTransactionCount(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
-	networkMode := os.Getenv("NETWORK_MODE")
-
-	var supportedContracts []string
-
-	switch networkMode {
-	case "mainnet":
-		supportedContracts = []string{
-			"QmUjmtaEFTLpfm5Q6pZ4byriGFvxibF1h5XHWYRvTwvcJ3",
-			"QmNwpc6DwwQMuzHJiXrhmGzEwXyPK9PV5QqZrmDiDTb6TN",
-			"QmTycH8eLA9xp4Jckjit4LQkuRgeq3xaUZdKFsNtohrzFe",
-			"Qme6BUxAVX2vLN71j5sooXNKnZQJ6Y24q4ZkbkD9XjQBJ4",
-		}
-
-	case "testnet":
-		supportedContracts = []string{
-			"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
-			"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
-			"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
-			"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
-		}
-	default:
-		fmt.Printf("unsupported network mode: %v", networkMode)
-		c.JSON(http.StatusInternalServerError, gin.H{"transaction_count": 0})
-		return
+	supportedContracts := []string{
+		"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
+		"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
+		"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
+		"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
 	}
 
 	nfts, err := listNFTs()
@@ -705,8 +623,7 @@ func handleMetricsTransactionCount(c *gin.Context) {
 			continue
 		}
 
-		txCount := len(contractObj.SCTDataReply) - 1 // Ignoring the deployed state block
-		totalTransactionCount += txCount
+		totalTransactionCount += len(contractObj.SCTDataReply)
 	}
 
 	// Send the JSON response

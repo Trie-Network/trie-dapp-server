@@ -9,14 +9,16 @@ import (
 	"net/url"
 )
 
+const RUBIX_API = "http://localhost:20007"
+
 type AssetCountResponse struct {
 	BasicResponse
 	Nfts []struct {
-		Nft         string  `json:"nft"`
-		NftValue    float64 `json:"nft_value"`
-		OwnerDID    string  `json:"owner_did"`
-		NftMetadata string  `json:"nft_metadata"`
-		NFTFileName string  `json:"nft_file_name"`
+		Nft      string  `json:"nft"`
+		NftValue float64 `json:"nft_value"`
+		OwnerDID string  `json:"owner_did"`
+		NftMetadata string `json:"nft_metadata"`
+		NFTFileName string `json:"nft_file_name"`
 	} `json:"nfts"`
 }
 
@@ -69,7 +71,7 @@ func queryRubixNode(url string) (string, error) {
 }
 
 func listNFTs() ([]string, error) {
-	targetURL, err := url.JoinPath(RubixNodeAddress, "/api/list-nfts")
+	targetURL, err := url.JoinPath(RUBIX_API, "/api/list-nfts")
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct URL: %w", err)
 	}
@@ -93,7 +95,7 @@ func listNFTs() ([]string, error) {
 }
 
 func listSmartContractTransactions(contractId string) (*SmartContractDataResponse, error) {
-	targetURL, err := url.JoinPath(RubixNodeAddress, "/api/get-smart-contract-token-chain-data")
+	targetURL, err := url.JoinPath(RUBIX_API, "/api/get-smart-contract-token-chain-data")
 	if err != nil {
 		return nil, fmt.Errorf("failed form POST request, err: %v", err)
 	}
@@ -119,7 +121,7 @@ func listSmartContractTransactions(contractId string) (*SmartContractDataRespons
 }
 
 func listNFTTransactionsByID(nftId string) (*NFTTransactionList, error) {
-	baseURL, err := url.Parse(RubixNodeAddress)
+	baseURL, err := url.Parse(RUBIX_API)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct URL: %w", err)
 	}
