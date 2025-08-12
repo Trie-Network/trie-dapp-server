@@ -66,8 +66,8 @@ func getCreditBalance(db *leveldb.DB, did string) (*CreditInfo, error) {
 }
 
 type AddCredit struct {
-	UserDid string  `json:"user_did"`
-	Credit  float64 `json:"credit"`
+	UserDid         string  `json:"user_did"`
+	CurrentTimestamp float64 `json:"current_timestamp"`
 }
 
 func (s *Server) handleAddCredits(c *gin.Context) {
@@ -115,14 +115,14 @@ func (s *Server) handleAddCredits(c *gin.Context) {
 		return
 	}
 
-	creditInfoStr, err := wasmModule.CallFunction(contractInputRequest.SmartContractData)
+	_, err = wasmModule.CallFunction(contractInputRequest.SmartContractData)
 	if err != nil {
 		wrapError(c.JSON, fmt.Sprintf("unable to execute function, err: %v", err))
 		return
 	}
 
 	var addCredit AddCredit
-	err = json.Unmarshal([]byte(creditInfoStr), &addCredit)
+	err = json.Unmarshal([]byte(contractInputRequest.SmartContractData), &addCredit)
 	if err != nil {
 		wrapError(c.JSON, fmt.Sprintf("unable to unmarshal credit info, err: %v", err))
 		return
