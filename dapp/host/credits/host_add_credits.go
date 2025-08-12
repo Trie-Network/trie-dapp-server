@@ -44,7 +44,7 @@ func (h *DoAddCredit) Callback() host.HostFunctionCallBack {
 
 type AddCreditData struct {
 	UserDid string  `json:"user_did"`
-	Credit  float64 `json:"credit"`
+	CurrentTimestamp  float64 `json:"current_timestamp"`
 }
 
 func (h *DoAddCredit) callback(caller *wasmtime.Caller, args []wasmtime.Val) ([]wasmtime.Val, *wasmtime.Trap) {

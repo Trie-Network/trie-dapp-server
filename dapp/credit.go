@@ -131,13 +131,13 @@ func (s *Server) handleAddCredits(c *gin.Context) {
 	currTimestamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	// Assuming AddCredits is a function that adds credits to the given DID
-	err = addCreditsToDB(s.DB, addCredit.UserDid, uint(addCredit.Credit), currTimestamp)
+	err = addCreditsToDB(s.DB, addCredit.UserDid, 500, currTimestamp)
 	if err != nil {
 		getInternalError(c, "Failed to add credits: "+err.Error())
 		return
 	}
 
-	wrapSuccess(c.JSON, fmt.Sprintf("Successfully added %.2f credits to DID %s", addCredit.Credit, addCredit.UserDid))
+	wrapSuccess(c.JSON, fmt.Sprintf("Successfully added %.2f credits to DID %s", 500, addCredit.UserDid))
 	return
 }
 
