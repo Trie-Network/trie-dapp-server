@@ -66,7 +66,7 @@ func getCreditBalance(db *leveldb.DB, did string) (*CreditInfo, error) {
 }
 
 type AddCredit struct {
-	UserDid         string  `json:"user_did"`
+	UserDid          string  `json:"user_did"`
 	CurrentTimestamp float64 `json:"current_timestamp"`
 }
 
@@ -132,13 +132,18 @@ func (s *Server) handleAddCredits(c *gin.Context) {
 
 	// Assuming AddCredits is a function that adds credits to the given DID
 	creditInfo := creditMapSmartContractInput["add_credit"]
+	if creditInfo.UserDid == "" {
+		wrapError(c.JSON, "unexpected: handleAddCredits, User DID is required")
+		return
+	}
+
 	err = addCreditsToDB(s.DB, creditInfo.UserDid, 500, currTimestamp)
 	if err != nil {
 		getInternalError(c, "Failed to add credits: "+err.Error())
 		return
 	}
 
-	wrapSuccess(c.JSON, fmt.Sprintf("Successfully added %v credits to DID %s", 500, addCredit.UserDid))
+	wrapSuccess(c.JSON, fmt.Sprintf("Successfully added %v credits to DID %s", 500, creditInfo.UserDid))
 	return
 }
 
