@@ -121,8 +121,8 @@ func (s *Server) handleAddCredits(c *gin.Context) {
 		return
 	}
 
-	var addCredit AddCredit
-	err = json.Unmarshal([]byte(contractInputRequest.SmartContractData), &addCredit)
+	var creditMapSmartContractInput map[string]AddCredit = make(map[string]AddCredit)
+	err = json.Unmarshal([]byte(contractInputRequest.SmartContractData), &creditMapSmartContractInput)
 	if err != nil {
 		wrapError(c.JSON, fmt.Sprintf("unable to unmarshal credit info, err: %v", err))
 		return
@@ -131,13 +131,14 @@ func (s *Server) handleAddCredits(c *gin.Context) {
 	currTimestamp := strconv.FormatInt(time.Now().Unix(), 10)
 
 	// Assuming AddCredits is a function that adds credits to the given DID
-	err = addCreditsToDB(s.DB, addCredit.UserDid, 500, currTimestamp)
+	creditInfo := creditMapSmartContractInput["add_credit"]
+	err = addCreditsToDB(s.DB, creditInfo.UserDid, 500, currTimestamp)
 	if err != nil {
 		getInternalError(c, "Failed to add credits: "+err.Error())
 		return
 	}
 
-	wrapSuccess(c.JSON, fmt.Sprintf("Successfully added %.2f credits to DID %s", 500, addCredit.UserDid))
+	wrapSuccess(c.JSON, fmt.Sprintf("Successfully added %v credits to DID %s", 500, addCredit.UserDid))
 	return
 }
 
