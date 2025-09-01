@@ -52,6 +52,10 @@ func checkEnvVars() error {
 		return errors.New("RUBIX_NODE_ADDRESS environment variable is not set")
 	}
 
+	if os.Getenv("DAPP_SERVER_PORT") == "" {
+		return errors.New("DAPP_SERVER_PORT environment variable is not set")
+	}
+
 	return nil
 }
 
@@ -105,7 +109,8 @@ func main() {
 	r.POST("/api/add_credits", server.handleAddCredits)
 	r.POST("/api/deduct_credits", server.handleDeductCredits)
 
-	r.Run(":8082")
+	port := os.Getenv("DAPP_SERVER_PORT")
+	r.Run(":" + port)
 }
 
 func wrapError(f func(code int, obj any), msg string) {
