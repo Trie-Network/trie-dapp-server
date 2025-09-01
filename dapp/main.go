@@ -34,7 +34,7 @@ var Upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
-	HandshakeTimeout: 11 * time.Minute,
+	HandshakeTimeout: 50 * time.Minute,
 }
 
 func enableCors(w *http.ResponseWriter) {
