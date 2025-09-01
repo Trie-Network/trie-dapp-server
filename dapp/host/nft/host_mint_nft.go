@@ -1,8 +1,12 @@
 package nft
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 
 	// "io/ioutil"
 
@@ -28,22 +32,22 @@ type DoMintNFTApiCall struct {
 }
 
 type MintNFTData struct {
-	Did      string  `json:"did"`
-	NftId  string  `json:"nftId"`
-	NftData  string  `json:"nftData"`
-	NftValue float64 `json:"nftValue"`
-	NftMetadata string `json:"nftMetadata"`
-	NFTFileName string `json:"nftFilename"`
+	Did         string  `json:"did"`
+	NftId       string  `json:"nftId"`
+	NftData     string  `json:"nftData"`
+	NftValue    float64 `json:"nftValue"`
+	NftMetadata string  `json:"nftMetadata"`
+	NFTFileName string  `json:"nftFilename"`
 }
 
 type deployNFTReq struct {
-	Nft        string  `json:"nft"`
-	Did        string  `json:"did"`
-	QuorumType int32   `json:"quorum_type"`
-	NftData    string  `json:"nft_data"`
-	NftValue   float64 `json:"nft_value"`
-	NFTMetadata string `json:"nft_metadata"`
-	NFTFileName string `json:"nft_file_name"`
+	Nft         string  `json:"nft"`
+	Did         string  `json:"did"`
+	QuorumType  int32   `json:"quorum_type"`
+	NftData     string  `json:"nft_data"`
+	NftValue    float64 `json:"nft_value"`
+	NFTMetadata string  `json:"nft_metadata"`
+	NFTFileName string  `json:"nft_file_name"`
 }
 
 func NewDoMintNFTApiCall() *DoMintNFTApiCall {
@@ -167,6 +171,13 @@ func (h *DoMintNFTApiCall) callback(
 		return utils.HandleError(errMsg)
 	}
 
+	// Subscribe to the Asset
+	err = subscribeNFT(h.nodeAddress, mintNFTData.NftId)
+	if err != nil {
+		errMsg := "Failed to subscribe to NFT events" + err.Error()
+		return utils.HandleError(errMsg)
+	}
+
 	responseStr := func() string {
 		var data = struct {
 			NftId string `json:"nftId"`
@@ -187,4 +198,36 @@ func (h *DoMintNFTApiCall) callback(
 	}
 
 	return utils.HandleOk() // Success
+}
+
+func subscribeNFT(nodeAddress string, nftId string) error {
+	subscribeSmartContractReq := map[string]interface{}{
+		"nft": nftId,
+	}
+
+	subscribeSmartContractReqBytes, err := json.Marshal(subscribeSmartContractReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal subscribe smart contract request: %v", err)
+	}
+
+	subscribeContractURL, err := url.JoinPath(nodeAddress, "/api/subscribe-nft")
+	if err != nil {
+		return fmt.Errorf("error joining URL path: %v", err)
+	}
+
+	resp, err := http.Post(subscribeContractURL, "application/json", bytes.NewBuffer(subscribeSmartContractReqBytes))
+	if err != nil {
+		return fmt.Errorf("error forwarding request to Rubix node: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("error reading response body: %v", err)
+		}
+		return fmt.Errorf("unexpected response from Rubix node: %s", respBody)
+	}
+
+	return nil
 }
