@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path"
 	"strconv"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"dapp/host/credits"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 type CreditInfo struct {
@@ -71,7 +73,7 @@ type AddCredit struct {
 }
 
 func (s *Server) handleAddCredits(c *gin.Context) {
-	nodeAddress := "http://localhost:20007"
+	nodeAddress := os.Getenv("RUBIX_NODE_ADDRESS")
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/inference_credit_purchase_contract.wasm")
