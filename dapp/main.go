@@ -604,11 +604,37 @@ func (s *Server) handleMetricsTransactionCount(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
-	supportedContracts := []string{
-		"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
-		"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
-		"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
-		"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
+	networkMode := os.Getenv("NETWORK_MODE")
+
+	var supportedContracts []string
+
+	switch networkMode {
+	case "mainnet":
+		supportedContracts = []string{
+			"QmUjmtaEFTLpfm5Q6pZ4byriGFvxibF1h5XHWYRvTwvcJ3",
+			"QmNwpc6DwwQMuzHJiXrhmGzEwXyPK9PV5QqZrmDiDTb6TN",
+			"QmTycH8eLA9xp4Jckjit4LQkuRgeq3xaUZdKFsNtohrzFe",
+			"Qme6BUxAVX2vLN71j5sooXNKnZQJ6Y24q4ZkbkD9XjQBJ4",
+		}
+
+	case "testnet":
+		supportedContracts = []string{
+			"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
+			"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
+			"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
+			"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
+		}
+	case "devnet":
+		supportedContracts = []string{
+			"QmaGdasKS7UXRgwU8EViivY55uo2xZBPuxJq968kxjXQJJ",
+			"QmR2brEEfYywHbCTxXoCsMCXksBrum9widZ5k6FDGHeRgW",
+			"QmZM5wdxJmH5QsVSu3TxEUSaDmW5DDqn2duZKPg8Su6H5p",
+			"QmVScNzdPRuN2r7DYwcnr3PVFB4s6TPWv5o9iVWsuqyPeW",
+		}
+	default:
+		fmt.Printf("unsupported network mode: %v", networkMode)
+		c.JSON(http.StatusInternalServerError, gin.H{"transaction_count": 0})
+		return
 	}
 
 	nfts, err := listNFTs()
