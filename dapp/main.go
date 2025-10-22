@@ -47,7 +47,23 @@ type Server struct {
 	DB *leveldb.DB
 }
 
+func checkEnvVars() error {
+	if os.Getenv("RUBIX_NODE_ADDRESS") == "" {
+		return errors.New("RUBIX_NODE_ADDRESS environment variable is not set")
+	}
+
+	if os.Getenv("DAPP_SERVER_PORT") == "" {
+		return errors.New("DAPP_SERVER_PORT environment variable is not set")
+	}
+
+	return nil
+}
+
 func main() {
+	if err := checkEnvVars(); err != nil {
+		panic(fmt.Sprintf("environment variable check failed: %v", err))
+	}
+
 	db, err := leveldb.OpenFile("./creditstorage", nil)
 	if err != nil {
 		panic(fmt.Sprintf("failed to open leveldb: %v", err))
@@ -93,7 +109,8 @@ func main() {
 	r.POST("/api/add_credits", server.handleAddCredits)
 	r.POST("/api/deduct_credits", server.handleDeductCredits)
 
-	r.Run(":8082")
+	port := os.Getenv("DAPP_SERVER_PORT")
+	r.Run(":" + port)
 }
 
 func wrapError(f func(code int, obj any), msg string) {
@@ -180,6 +197,8 @@ func (s *Server) GetRatingsFromChain(c *gin.Context) {
 const RATING_CONTRACT_HASH = "QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2"
 
 func GetRatingFromChain(assetID string) (float64, int, error) {
+	nodeAddress := os.Getenv("RUBIX_NODE_ADDRESS")
+
 	reqBody := SmartContractDataRequest{
 		Token:  RATING_CONTRACT_HASH,
 		Latest: false,
@@ -192,7 +211,12 @@ func GetRatingFromChain(assetID string) (float64, int, error) {
 
 	fmt.Printf("Sending request body to Rubix: %s\n", string(bodyBytes))
 
-	resp, err := http.Post("http://localhost:20007/api/get-smart-contract-token-chain-data", "application/json", bytes.NewBuffer(bodyBytes))
+	baseURL, err := url.JoinPath(nodeAddress, "api/get-smart-contract-token-chain-data")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	resp, err := http.Post(baseURL, "application/json", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -261,7 +285,7 @@ func GetRatingFromChain(assetID string) (float64, int, error) {
 }
 
 func (s *Server) handleUploadAsset(c *gin.Context) {
-	nodeAddress := "http://localhost:20007"
+	nodeAddress := os.Getenv("RUBIX_NODE_ADDRESS")
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/asset_publish_contract.wasm")
@@ -314,7 +338,7 @@ func (s *Server) handleUploadAsset(c *gin.Context) {
 }
 
 func (s *Server) handleUseAsset(c *gin.Context) {
-	nodeAddress := "http://localhost:20007"
+	nodeAddress := os.Getenv("RUBIX_NODE_ADDRESS")
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/asset_usage_contract.wasm")
@@ -368,7 +392,7 @@ func (s *Server) handleUseAsset(c *gin.Context) {
 
 // NEW HANDLER FOR CREATE TOKEN
 func (s *Server) handleCreateToken(c *gin.Context) {
-	nodeAddress := "http://localhost:20007"
+	nodeAddress := os.Getenv("RUBIX_NODE_ADDRESS")
 	quorumType := 2
 
 	// Use the existing WASM file that contains CREATE_FT functionality
@@ -423,7 +447,7 @@ func (s *Server) handleCreateToken(c *gin.Context) {
 }
 
 func (s *Server) handleUserOnboarding(c *gin.Context) {
-	nodeAddress := "http://localhost:20007"
+	nodeAddress := os.Getenv("RUBIX_NODE_ADDRESS")
 	quorumType := 2
 
 	selfContractHashPath := path.Join("../artifacts/onboarding_contract.wasm")
@@ -580,11 +604,37 @@ func (s *Server) handleMetricsTransactionCount(c *gin.Context) {
 	w := http.ResponseWriter(c.Writer)
 	enableCors(&w)
 
-	supportedContracts := []string{
-		"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
-		"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
-		"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
-		"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
+	networkMode := os.Getenv("NETWORK_MODE")
+
+	var supportedContracts []string
+
+	switch networkMode {
+	case "mainnet":
+		supportedContracts = []string{
+			"QmUjmtaEFTLpfm5Q6pZ4byriGFvxibF1h5XHWYRvTwvcJ3",
+			"QmNwpc6DwwQMuzHJiXrhmGzEwXyPK9PV5QqZrmDiDTb6TN",
+			"QmTycH8eLA9xp4Jckjit4LQkuRgeq3xaUZdKFsNtohrzFe",
+			"Qme6BUxAVX2vLN71j5sooXNKnZQJ6Y24q4ZkbkD9XjQBJ4",
+		}
+
+	case "testnet":
+		supportedContracts = []string{
+			"QmVRwuiYMES2vySvJwqZ1oFgxtDjWwQXWuhgTctgDNu9ye",
+			"QmVAMKVR1Q9etqfwqfdSGWseNjRKdmHr6Zck2TL8MfeEyT",
+			"QmfEkQvWcLZEghJ1swffQg9nxcnT13j6xLiB3CqPXUvfg2",
+			"QmS5DogBfk96voS54hhE4KemToGRWgGC6Fbk5cZboTNh3m",
+		}
+	case "devnet":
+		supportedContracts = []string{
+			"QmaGdasKS7UXRgwU8EViivY55uo2xZBPuxJq968kxjXQJJ",
+			"QmR2brEEfYywHbCTxXoCsMCXksBrum9widZ5k6FDGHeRgW",
+			"QmZM5wdxJmH5QsVSu3TxEUSaDmW5DDqn2duZKPg8Su6H5p",
+			"QmVScNzdPRuN2r7DYwcnr3PVFB4s6TPWv5o9iVWsuqyPeW",
+		}
+	default:
+		fmt.Printf("unsupported network mode: %v", networkMode)
+		c.JSON(http.StatusInternalServerError, gin.H{"transaction_count": 0})
+		return
 	}
 
 	nfts, err := listNFTs()

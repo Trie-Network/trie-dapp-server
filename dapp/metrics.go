@@ -7,18 +7,21 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
-const RUBIX_API = "http://localhost:20007"
+var RUBIX_API = os.Getenv("RUBIX_NODE_ADDRESS")
 
 type AssetCountResponse struct {
 	BasicResponse
 	Nfts []struct {
-		Nft      string  `json:"nft"`
-		NftValue float64 `json:"nft_value"`
-		OwnerDID string  `json:"owner_did"`
-		NftMetadata string `json:"nft_metadata"`
-		NFTFileName string `json:"nft_file_name"`
+		Nft         string  `json:"nft"`
+		NftValue    float64 `json:"nft_value"`
+		OwnerDID    string  `json:"owner_did"`
+		NftMetadata string  `json:"nft_metadata"`
+		NFTFileName string  `json:"nft_file_name"`
 	} `json:"nfts"`
 }
 
